@@ -1,5 +1,5 @@
 {
-  "name": "aliyun-oss-react-native",
+  "name": "aliyun-oss-rn-decoritt",
   "version": "1.0.0-zsCallBack.1",
   "description": "React Native SDK for aliyun object storage service",
   "main": "index.js",
