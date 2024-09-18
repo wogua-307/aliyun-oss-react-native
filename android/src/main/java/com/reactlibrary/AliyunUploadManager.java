@@ -71,28 +71,39 @@ public class AliyunUploadManager {
      * @param promise
      */
     public void asyncUpload(final ReactContext context, String bucketName, String ossFile, String sourceFile, ReadableMap options, final Promise promise) {
-        // Content to file:// start
-        Uri selectedVideoUri = Uri.parse(sourceFile);
+        // 处理 URI
+        Uri uri = Uri.parse(sourceFile);
 
-        // 1. content uri -> file path
-        // 2. inputstream -> temp file path
-        Cursor cursor = null;
-        try {
-            String[] proj = {MediaStore.Images.Media.DATA};
-            cursor = context.getCurrentActivity().getContentResolver().query(selectedVideoUri, proj, null, null, null);
-            if (cursor == null) sourceFile = selectedVideoUri.getPath();
-            int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
-            cursor.moveToFirst();
-            sourceFile = cursor.getString(column_index);
-        } catch (Exception e) {
-            sourceFile = FileUtils.getFilePathFromURI(context.getCurrentActivity(), selectedVideoUri);
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
+        // 确保 sourceFile 为绝对路径
+        String filePath = getPathFromUri(context, uri);
+        if (filePath == null) {
+            promise.reject("File not found", "File path could not be determined.");
+            return;
         }
+
         // init upload request
-        PutObjectRequest put = new PutObjectRequest(bucketName, ossFile, sourceFile);
+        PutObjectRequest put = new PutObjectRequest(bucketName, ossFile, filePath);
+         // 设置callbackParam和callbackVars
+        if (options.hasKey("callbackParam")) {
+            ReadableMap callbackParam = options.getMap("callbackParam");
+            HashMap<String, String> callbackParamMap = new HashMap<>();
+            callbackParamMap.put("callbackHost", callbackParam.getString("callbackHost"));
+            callbackParamMap.put("callbackUrl", callbackParam.getString("callbackUrl"));
+            callbackParamMap.put("callbackBody", callbackParam.getString("callbackBody"));
+            callbackParamMap.put("callbackBodyType", callbackParam.getString("callbackBodyType"));
+            put.setCallbackParam(callbackParamMap);
+        }
+
+        if (options.hasKey("callbackVars")) {
+            ReadableMap callbackVars = options.getMap("callbackVars");
+            HashMap<String, String> callbackVarsMap = new HashMap<>();
+            callbackVarsMap.put("x:user_id", callbackVars.getString("x:user_id"));
+            callbackVarsMap.put("x:region", callbackVars.getString("x:region"));
+            callbackVarsMap.put("x:file_name", callbackVars.getString("x:file_name"));
+            callbackVarsMap.put("x:action", callbackVars.getString("x:action"));
+            callbackVarsMap.put("x:expire", callbackVars.getString("x:expire"));
+            put.setCallbackVars(callbackVarsMap);
+        }
         ObjectMetadata metadata = new ObjectMetadata();
         metadata.setContentType("application/octet-stream");
         put.setMetadata(metadata);
@@ -128,6 +139,31 @@ public class AliyunUploadManager {
         });
         Log.d("AliyunOSS", "OSS uploadObjectAsync ok!");
     }
+
+    private String getPathFromUri(Context context, Uri uri) {
+    if (uri == null) return null;
+
+    if ("content".equals(uri.getScheme())) {
+        Cursor cursor = null;
+        try {
+            String[] projection = {MediaStore.Images.Media.DATA};
+            cursor = context.getContentResolver().query(uri, projection, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int columnIndex = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+                return cursor.getString(columnIndex);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+    } else if ("file".equals(uri.getScheme())) {
+        return uri.getPath();
+    }
+    return null;
+}
 
     /**
      * asyncAppendObject
